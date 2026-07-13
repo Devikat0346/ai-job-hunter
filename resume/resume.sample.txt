@@ -1,0 +1,28 @@
+Jordan Casey
+Site Reliability Engineer
+
+Summary
+5 years in SRE/production engineering for financial services systems handling
+real-time and batch transaction processing. Comfortable owning incidents end
+to end, building observability from scratch, and working directly with
+engineering + business stakeholders to translate reliability work into
+business impact.
+
+Experience
+Site Reliability Engineer, Regional Bank Corp (2021 - present)
+- On-call owner for real-time payment authorization and batch settlement systems
+- Built SLI/SLO dashboards and error budget tracking used across 4 payment channels
+- Led root-cause analysis for P1 incidents, cut average time-to-resolution by 35%
+- Automated reconciliation checks that catch settlement breaks before they reach customers
+
+Production Support Engineer, Regional Bank Corp (2019 - 2021)
+- Supported nightly batch processing for ACH and wire transfer pipelines
+- Wrote runbooks and alerting rules that reduced false-positive pages by half
+
+Skills
+Python, SQL, Kubernetes, Prometheus/Grafana, incident response, payments
+domain (ACH/wire/card rails), stakeholder communication
+
+Note: this is a placeholder sample resume used for demoing this project
+publicly. Swap in your own resume locally (resume/resume.txt, gitignored)
+or as the RESUME_TEXT GitHub secret for the actual daily job scan.
