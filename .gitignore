@@ -1,0 +1,8 @@
+# my actual resume, never want this in the public repo
+resume/resume.txt
+
+.env
+venv/
+__pycache__/
+*.pyc
+.DS_Store
