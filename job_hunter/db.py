@@ -57,10 +57,10 @@ def save_job(job):
     return resp.json()[0]
 
 
-def save_decision(job_id, telegram_message_id):
+def save_decision(job_id, whatsapp_message_id):
     payload = {
         "job_id": job_id,
-        "telegram_message_id": telegram_message_id,
+        "whatsapp_message_id": whatsapp_message_id,
         "status": "pending",
     }
     resp = requests.post(
@@ -73,11 +73,14 @@ def save_decision(job_id, telegram_message_id):
     return resp.json()[0]
 
 
-def find_pending_decision(telegram_message_id):
+def find_pending_decision_by_job_id(job_id):
+    # the whatsapp button reply hands us the job id directly (see notify.py),
+    # so we don't need to look anything up by message id the way the old
+    # telegram version had to
     resp = requests.get(
         _url("decisions"),
         headers=HEADERS,
-        params={"telegram_message_id": f"eq.{telegram_message_id}", "select": "*"},
+        params={"job_id": f"eq.{job_id}", "status": "eq.pending", "select": "*"},
         timeout=15,
     )
     resp.raise_for_status()

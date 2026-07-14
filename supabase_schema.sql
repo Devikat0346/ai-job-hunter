@@ -1,6 +1,8 @@
 -- run this once in the supabase SQL editor for a new project.
--- three tables: jobs we've scored, decisions you've made on the ones we sent you,
--- and a one-row table just to remember our place in telegram's update feed.
+-- two tables: jobs we've scored, and decisions you've made on the ones we sent you.
+-- (used to have a third table to track our place in a polling feed, back when
+-- this used telegram - whatsapp pushes replies straight to a webhook instead,
+-- so there's nothing to keep track of between runs anymore)
 
 create table jobs (
   id bigint generated always as identity primary key,
@@ -19,17 +21,10 @@ create table jobs (
 create table decisions (
   id bigint generated always as identity primary key,
   job_id bigint references jobs (id),
-  telegram_message_id bigint not null,
+  whatsapp_message_id text not null,
   status text not null default 'pending', -- pending / interested / skipped
   created_at timestamptz not null default now()
 );
-
-create table bot_state (
-  id int primary key,
-  last_update_id bigint
-);
-
-insert into bot_state (id, last_update_id) values (1, null);
 
 -- this project uses supabase's service_role key from github actions secrets,
 -- so it's not relying on row level security for access control - the key
