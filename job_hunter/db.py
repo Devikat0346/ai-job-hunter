@@ -1,13 +1,6 @@
-# tiny wrapper around supabase's REST api (PostgREST). didn't bother pulling in
-# the official supabase-python package for this - it's just a couple of http
-# calls and requests does the job fine.
-#
-# note: this uses the service_role key, not the public anon key. that's fine
-# for a single-user project like this (the key only ever lives in github
-# secrets / your own env, never shipped to a browser). if you were building
-# something other people would use, you'd want the anon key + row level
-# security policies instead - see the original article this was inspired by,
-# it does exactly that.
+# just talking to supabase's REST api directly instead of installing their
+# python package, didn't feel worth the extra dependency for a few http calls.
+# using the service_role key here (not anon) since it's just me using this.
 
 import requests
 

@@ -71,8 +71,8 @@ def score_job(resume_text, job):
 
 
 def _parse_score_response(raw_text):
-    # models don't always give back clean json even when you ask nicely,
-    # so pull out the first {...} block instead of trusting the whole string
+    # sometimes it wraps the json in a sentence anyway even though i told it not to,
+    # so just grab the first {...} looking chunk instead of trusting the whole reply
     match = re.search(r"\{.*\}", raw_text, re.DOTALL)
     if not match:
         print(f"couldn't find json in model response: {raw_text!r}")

@@ -1,102 +1,81 @@
 # ai-job-hunter
 
-A little agent that goes and looks for jobs every morning, checks them against
-my resume, and pings me on WhatsApp with the ones actually worth looking at.
-I built this while job hunting for Forward Deployed Engineer roles - mostly
-because I was tired of manually scrolling through job boards every day and
-missing stuff.
+Small script that checks job boards every morning, scores whatever's new
+against my resume, and messages me the good ones on whatsapp so I don't have
+to sit there scrolling LinkedIn/Indeed every day. I'm job hunting for
+Forward Deployed Engineer type roles right now and this has actually saved
+me a decent amount of time.
 
-Credit where it's due: this was inspired by [Abhijay Vuyyuru's "build your
-own AI job hunting agent" post](https://abhijayvuyyuru.substack.com/p/build-your-own-ai-job-hunting-agent).
-The original walks through building this with a Hostinger VPS, Apify's
-LinkedIn scraper, OpenAI/Anthropic, and Telegram - most of which cost money
-pretty quickly. I rebuilt the same idea but swapped almost every piece for
-something free, and used WhatsApp instead of Telegram since that's what I
-actually check throughout the day. Below is what's different and why.
+Got the idea from [this substack post](https://abhijayvuyyuru.substack.com/p/build-your-own-ai-job-hunting-agent)
+about building basically the same thing. Their version uses a Hostinger VPS,
+Apify to scrape LinkedIn, OpenAI, and Telegram. I didn't want to pay for any
+of that (also pretty sure scraping LinkedIn directly isn't allowed), so I
+swapped almost everything for free stuff, and used WhatsApp instead of
+Telegram since that's what I actually have open all day.
 
-## What it actually does
+## what it does
 
-1. Every morning, pull fresh job postings for keywords I care about
-2. Skip anything already seen before (checked against a database)
-3. Ask an LLM to score each new one against my resume, 1-10, with a reason
-4. Message me the best ones on WhatsApp, with "Interested" / "Skip" buttons
-5. When I tap a button, log that decision so there's a record of what I did
+- pulls fresh postings every morning from Remotive + RemoteOK (both free, no api key needed)
+- skips anything it's already shown me before (tracked in a supabase table)
+- sends new ones to an LLM (Groq, free) along with my resume, gets back a 1-10 score + why
+- whatsapps me the top ~5, each with an Interested / Skip button
+- tapping a button logs my decision back to the database
 
-That's basically it. No auto-apply, no auto-generated cover letters getting
-fired off without me looking - I still make every actual decision, the agent
-just does the tedious filtering part.
+it does NOT auto-apply to anything or write cover letters for me. I still
+look at every job myself and decide - it just cuts down the pile to look
+through in the first place.
 
-## Why it's (mostly) free instead of following the article exactly
+## the annoying part - whatsapp needs a webhook
 
-| Piece | Article's approach | What I used instead | Why |
-|---|---|---|---|
-| Job data | Apify's LinkedIn scraper | [Remotive](https://remotive.com/api/remote-jobs) + [RemoteOK](https://remoteok.com/api) APIs | Both are free with no signup, and scraping LinkedIn directly is against their ToS. Coverage isn't 100% identical to LinkedIn but it's decent. |
-| LLM | OpenAI / Anthropic (needs a card) | [Groq](https://console.groq.com) | Free API key, no card, and fast |
-| Daily scan | Hostinger VPS (~$5/mo, always on) | GitHub Actions cron | Free on a public repo. No server sitting around 24/7 for something that only needs to run once a day. |
-| Messaging | Telegram | WhatsApp (Meta Cloud API) | Wanted this on WhatsApp since that's where I actually look. Free tier, but see the trade-off below. |
-| Reply handling | Telegram gateway on the VPS | Small Flask webhook on Render's free tier | Explained below - this is the one part that isn't 100% serverless anymore. |
-| Database | Supabase | Supabase (same) | Their free tier is genuinely free, no changes needed here |
+Telegram lets your bot just ask "anything new?" whenever, which is how I
+originally built the reply-listening bit (and matches the original article).
+WhatsApp's Cloud API doesn't do that - Meta pushes button taps to a URL you
+register with them, and that url has to be reachable whenever someone might
+tap something, not just once a day.
 
-End result: this still costs $0/month to run. The trade-off for using
-WhatsApp is explained below.
+So there's one small piece of this that isn't a github actions cron job:
+`job_hunter/webhook.py`, a tiny flask app sitting on Render's free tier,
+just waiting for Meta to POST to it. Render's free tier falls asleep after
+15 min with no traffic and takes ~30-60 sec to wake up, so if I tap a button
+right when it's asleep, it might take a bit to register. Meta retries failed
+deliveries so it's not like the tap gets lost, just delayed sometimes.
 
-## The one wrinkle: WhatsApp needs a webhook, not a poll
+Everything else - the actual daily job search part - is still just a
+scheduled github action, no server needed.
 
-Telegram lets a bot just ask "anything new for me?" whenever it feels like it
-(that's how the original design + my first draft of this worked). WhatsApp's
-Cloud API doesn't work that way - it pushes button taps to a URL you
-register with Meta, and that URL has to be up and listening whenever someone
-might tap a button, not just once a day.
-
-So this project has one small always-on-ish piece: `job_hunter/webhook.py`,
-a tiny Flask app deployed to Render's free web service tier. Everything else
-(the actual daily job search) is still a GitHub Actions cron job with no
-server involved. Render's free tier does spin the service down after 15
-minutes of no traffic and takes 30-60 seconds to wake back up on the next
-request - Meta retries failed webhook deliveries for a while, so a button
-tap that lands while the service is asleep should still eventually go
-through, just not instantly.
-
-## How it's put together
+## layout
 
 ```
-daily_scan.yml (github actions cron, once a day)
-  -> fetch_jobs.py     pulls postings from Remotive + RemoteOK
-  -> db.py              checks which ones are new
-  -> score_jobs.py      asks Groq to score the new ones against my resume
-  -> db.py              saves every scored job (so we don't re-score it tomorrow)
-  -> notify.py          whatsapps me the top matches with Interested/Skip buttons
+job_hunter/
+  fetch_jobs.py     - hits remotive + remoteok apis
+  score_jobs.py      - sends jobs + resume to groq, gets back a score
+  notify.py           - sends the whatsapp message w/ buttons
+  webhook.py          - flask app, listens for button taps (deployed on render)
+  db.py               - all the supabase read/write calls
+  main.py             - ties fetch -> score -> notify together, this is what the cron runs
+  config.py           - reads all the env vars / secrets
 
-webhook.py (small Flask app, deployed on Render, always listening)
-  -> receives the button tap from Meta's servers
-  -> db.py              marks that job as interested/skipped
+.github/workflows/daily_scan.yml   - the actual cron schedule
+supabase_schema.sql                 - run this once when setting up a new supabase project
+render.yaml / Dockerfile            - for deploying webhook.py
 ```
 
-## Setup
+## setting it up
 
-### 1. WhatsApp (Meta Cloud API)
-- Go to [developers.facebook.com](https://developers.facebook.com), create an app, add the "WhatsApp" product
-- Meta gives you a free test phone number to start - grab its **phone number ID** and a **temporary access token** from the WhatsApp > API Setup page (you can generate a permanent token later under System Users, but the temporary one is fine to get started)
-- Add your own phone number as a recipient under "To" in that same API Setup page (in developer mode you can only message verified numbers)
-- Message that test number from your own WhatsApp first - Meta requires the user to message the business first (or within the last 24h) before it'll deliver a normal message to them
-- Make up your own random string for `WHATSAPP_VERIFY_TOKEN` (you'll enter this same value on Meta's side later, it's just a shared secret so Meta knows it's really you registering the webhook)
+**Whatsapp (Meta cloud api)**
+- make an app at developers.facebook.com, add the WhatsApp product
+- meta gives you a free test number - copy its phone number id + a temporary token from API Setup
+- add your own number under "To" in that same page (test numbers can only message verified recipients)
+- send that test number a message from your own phone first - meta won't deliver to you otherwise until you've messaged them within the last 24h
+- pick any random string for a verify token, you'll use it again when setting up the webhook
 
-### 2. Groq
-- Sign up at [console.groq.com](https://console.groq.com) (free, no card)
-- Create an API key
+**Groq** - sign up at console.groq.com, free, no card, grab an api key
 
-### 3. Supabase
-- New project at [supabase.com](https://supabase.com) (free tier)
-- Open the SQL editor, paste in `supabase_schema.sql`, run it
-- Grab your project URL and the `service_role` key from Project Settings > API
+**Supabase** - new project (free tier), open the SQL editor and run `supabase_schema.sql`, then grab the project url + service_role key from settings
 
-### 4. Deploy the webhook to Render
-- New Web Service on [render.com](https://render.com), point it at this repo, it'll pick up `render.yaml` + the `Dockerfile` automatically
-- Add the env vars it asks for (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TO_NUMBER`, `WHATSAPP_VERIFY_TOKEN`, `SUPABASE_URL`, `SUPABASE_KEY`)
-- Once it's deployed, go back to Meta's WhatsApp > Configuration page and set the webhook URL to `https://<your-render-url>/webhook`, with the verify token you made up above. Subscribe to the `messages` field.
+**Render** - new web service pointed at this repo, it'll find the render.yaml/Dockerfile on its own, just fill in the env vars it asks for. once it's live, go back to meta's WhatsApp > Configuration page, set the webhook url to `https://<your-render-app>/webhook` with the verify token from above, subscribe to `messages`.
 
-### 5. Wire up GitHub secrets for the daily scan
-
+**Github secrets** for the daily scan:
 ```
 gh secret set GROQ_API_KEY
 gh secret set WHATSAPP_TOKEN
@@ -107,56 +86,39 @@ gh secret set SUPABASE_KEY
 gh secret set RESUME_TEXT < resume/resume.txt
 ```
 
-And a couple of non-secret repo variables for your search:
-
+and the search settings (not secret, just repo variables):
 ```
 gh variable set SEARCH_KEYWORDS --body "forward deployed engineer,solutions engineer"
 gh variable set SEARCH_LOCATION --body "remote"
 ```
 
-### 6. Test it
-Trigger the scan manually instead of waiting for the cron:
-
+then trigger it manually to test instead of waiting for the actual schedule:
 ```
 gh workflow run daily_scan.yml
 ```
 
-Then check the Actions tab for logs, and your WhatsApp for messages. Tap a
-button and check the Render logs / your Supabase `decisions` table to make
-sure the reply made it through.
-
-## Running locally
+## running it on your own machine
 
 ```
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill it in
+cp .env.example .env    # fill in your own values
 export $(cat .env | xargs)
-python -m job_hunter.main       # runs one scan
-python -m job_hunter.webhook    # runs the webhook locally on :8080 (use ngrok or similar to expose it to Meta for local testing)
+python -m job_hunter.main      # runs one scan right now
+python -m job_hunter.webhook   # runs the webhook locally, port 8080
 ```
 
-## A few honest limitations
+## stuff that's not perfect
 
-- Job coverage isn't as broad as scraping LinkedIn directly would be -
-  Remotive and RemoteOK skew towards remote/tech roles. Good enough for what
-  I needed, not a total replacement for browsing LinkedIn yourself.
-- The scoring is only as good as what's in the job description text - some
-  postings are thin on detail and get scored lower than they maybe deserve.
-- No resume rewriting/auto-tailoring - it gives tailoring *suggestions*, not
-  a rewritten resume. I didn't want it inventing experience I don't have,
-  which is a real risk with full auto-rewrite approaches.
-- The webhook lives on Render's free tier, which sleeps after 15 minutes
-  idle. A button tap while it's asleep isn't lost, just delayed until Meta's
-  retry (or the next tap) wakes it back up.
-- Meta's test WhatsApp number only works with phone numbers you've manually
-  verified in the developer console, so this is really built for personal
-  use, not something you'd hand to someone else as-is.
+Remotive/RemoteOK don't have as much coverage as actually scraping LinkedIn
+would, they lean pretty remote/tech-heavy. Scoring is only as good as the job
+description text - some postings barely say anything and get scored low even
+if they'd probably be fine. It doesn't rewrite your resume for each job, just
+gives a one-line suggestion, since I didn't trust an LLM not to make up
+experience I don't actually have if I let it fully rewrite things. And the
+render free tier sleep thing means button taps aren't always instant.
 
-## About this project
-
-This is one of a handful of projects I built to demonstrate the kind of
-end-to-end ownership a Forward Deployed Engineer role needs - scoping a
-problem, picking pragmatic (and cheap) tools, and shipping something that
-actually works day to day, not just a demo.
+Put my own resume in as a github secret rather than committing it to the
+repo - `resume/resume.sample.txt` is just a placeholder so the project still
+runs if someone else clones it.

@@ -1,7 +1,6 @@
-# the daily job. github actions kicks this off every morning (see
-# .github/workflows/daily_scan.yml). goes and gets fresh postings, skips
-# anything we've already seen, scores what's left against the resume, and
-# telegrams you the best ones.
+# this is the daily job, github actions runs it every morning.
+# grabs fresh postings, skips whatever we've already seen, scores the rest
+# against the resume, whatsapps me the good ones.
 
 from job_hunter import config, db, notify
 from job_hunter.fetch_jobs import fetch_all_jobs
@@ -36,7 +35,7 @@ def run():
         print(f"scored {len(scored_jobs)} new jobs, none cleared the min score of {config.MIN_SCORE}")
         return
 
-    print(f"sending {len(top_jobs)} good matches to telegram")
+    print(f"sending {len(top_jobs)} good matches over whatsapp")
     for job in top_jobs:
         message_id = notify.send_job(job)
         db.save_decision(job["db_id"], message_id)

@@ -1,9 +1,7 @@
-# small flask app that just sits and waits for whatsapp to tell us about
-# button taps. unlike telegram, whatsapp's cloud api won't let you poll for
-# updates - it pushes them to a webhook url you register, so this one piece
-# actually needs to stay running somewhere (deployed to render's free tier,
-# see render.yaml / Dockerfile). everything else in this project is just a
-# github actions cron job, this is the one exception.
+# small flask app that sits and waits for whatsapp to tell us about button taps.
+# whatsapp pushes these to a url instead of letting you poll for them like
+# telegram does, so this one bit has to actually stay running (deployed on
+# render, see render.yaml). everything else here is just a cron job.
 
 from flask import Flask, request
 
